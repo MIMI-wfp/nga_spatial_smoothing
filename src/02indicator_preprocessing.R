@@ -48,6 +48,28 @@ nga_base_ai$vb12_inadequate <- ifelse(nga_base_ai$vitb12_mcg < allen_ear$ear_val
 nga_base_ai <- nga_base_ai %>% 
   dplyr::select(hhid, vb12_inadequate)
 
+rm(allen_ear)
+
+#-------------------------------------------------------------------------------
+
+# SUMMARISE DATA AVAILABILITY AND SAMPLE SIZES: 
+
+hh_locations <- read_csv("shapefiles/household_locations.csv")
+
+nga_base_ai <- nga_base_ai %>% 
+  left_join(hh_locations %>% dplyr::select(hhid, lga), by = "hhid")
+
+# Group by lga - and summarise how many households belong to each lga: 
+summary_lga <- nga_base_ai %>% 
+  group_by(lga) %>% 
+  summarise(n = n())
+
+#-------------------------------------------------------------------------------
+
+# FINALISE SCRIPT: 
+nga_base_ai <- nga_base_ai %>% 
+  dplyr::select(hhid, vb12_inadequate)
+
 # Tidy environment: 
 rm(list = setdiff(ls(), c("nga_base_ai")))
 

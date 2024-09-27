@@ -103,6 +103,8 @@ direct_map <- plot_map(data = vb12_inad_lga,
                        metric = "Prevalence of inadequate intake (%)", 
                        level = "lga")
 
+direct_map
+
 # tmap_save(direct_map, "outputs/maps/vb12_inad_direct.png", width = 8, height = 8, 
 #           units = "in", dpi = 600)
 
@@ -141,7 +143,7 @@ smoothed_vb12_inad <- fitGeneric(data = nga_analysis_df,
                                  regionVar = "lga",
                                  strataVar = "state",
                                  weightVar = "survey_wgt",
-                                 clusterVar = "~ea+hhid",
+                                 clusterVar = NULL,
                                  nest = TRUE,
                                  CI = 0.95, 
                                  verbose = TRUE)
@@ -152,8 +154,10 @@ head(smoothed_vb12_inad$smooth)
 
 # MAP SMOOTHED ESTIMATES: 
 vb12_smoothed <- smoothed_vb12_inad$smooth %>% 
-  dplyr::select(region, mean) %>% 
-  mutate(mean = mean * 100) %>% 
+  dplyr::select(region, mean, var, lower, upper) %>% 
+  mutate(mean = mean * 100,
+         lower = lower * 100, 
+         upper = upper * 100) %>% 
   rename(lga = region,
          vb12_inad_smoothed = mean)
 
@@ -171,3 +175,81 @@ vitb12_lga_smooth <- plot_map(data = vb12_smoothed,
 
 vitb12_lga_smooth
 
+# tmap_save(vitb12_lga_smooth, "outputs/maps/vb12_inad_smoothed.png", width = 8, height = 8, 
+#           units = "in", dpi = 600)
+
+# Map lower bound of credible interval: 
+vb12_smoothed_lower <- plot_map(data = vb12_smoothed, 
+                       col = "lower", 
+                       title = "Vitamin B12 (smoothed estimates):\n lower bound of 95% credible interval", 
+                       metric = "Prevalence of inadequate intake (%)", 
+                       level = "lga")
+
+vb12_smoothed_lower
+
+# tmap_save(vb12_smoothed_lower, "outputs/maps/vb12_smoothed_lower.png", width = 8, height = 8,
+#           units = "in", dpi = 600)
+
+# Map upper bound of credible interval:
+vb12_smoothed_upper <- plot_map(data = vb12_smoothed, 
+                       col = "upper", 
+                       title = "Vitamin B12 (smoothed estimates):\n upper bound of 95% credible interval", 
+                       metric = "Prevalence of inadequate intake (%)", 
+                       level = "lga")
+
+vb12_smoothed_upper
+
+# tmap_save(vb12_smoothed_upper, "outputs/maps/vb12_smoothed_upper.png", width = 8, height = 8,
+#           units = "in", dpi = 600)
+
+#-------------------------------------------------------------------------------
+
+# MAP VARIANCE ESTIMATES: 
+
+# Firstly alter plot_map function to use a different colour palette (viridis): 
+
+plot_map <- function(data, col, title, metric, level) {
+  
+  # Create a map: 
+  map <- tm_shape(data) + 
+    tm_fill(col = col,
+            title = metric, 
+            style = "cont",
+            breaks = seq(0, 0.062, by = 0.01),
+            textNA = "Missing Data",
+            legend.is.portrait = F,
+            palette = viridis::viridis(10)) + 
+    tm_layout(main.title = title, frame = F, main.title.size = 0.8, 
+              main.title.position = "center", legend.outside.position = "bottom",
+              legend.outside.size = 0.35) +
+    tm_borders(lwd = 0) + 
+    tm_legend(show = T) +
+    tm_shape(nigeria_1) +
+    tm_borders(col = "black", lwd = 0.8)
+  
+  return(map)
+}
+
+# Variance of direct estimates: 
+vb12_var_direct <- plot_map(data = vb12_inad_lga, 
+                       col = "vb12_inad_dir_var", 
+                       title = "Variance of direct HT estimates", 
+                       metric = "Variance", 
+                       level = "lga")
+
+vb12_var_direct
+
+# tmap_save(vb12_var_direct, "outputs/maps/var_direct.png", width = 8, height = 8,
+#           units = "in", dpi = 600)
+
+# Variance of smoothed estimates: 
+vb12_var_smoothed <- plot_map(data = vb12_smoothed, 
+                       col = "var", 
+                       title = "Variance of smoothed estimates", 
+                       metric = "Variance", 
+                       level = "lga")
+
+vb12_var_smoothed
+
+# tmap_save(vb12_var_smoothed, "outputs/maps/var_smoothed.png", width = 8, height = 8,
+#           units = "in", dpi = 600)
