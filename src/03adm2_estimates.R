@@ -3,15 +3,15 @@
 ################################################################################
 
 # Author: Mo Osman
-# Date created: 17-09-2024
+# Date created: 19-09-2024
 # Last edited: 
 
 # In this script, I will generate both direct and smoothed ADM2 level estimates.
 
 # INSTALL AND LOAD PACKAGES:
 
-rq_packages <- c("readr", "tidyverse", "srvyr", "SUMMER", "sf", "spdep", "tmap",
-                 "INLA")
+rq_packages <- c("readr", "tidyverse", "srvyr", "sf", "spdep", "tmap", "INLA", 
+                 "SUMMER")
 
 installed_packages <- rq_packages %in% rownames(installed.packages())
 if (any(installed_packages == FALSE)) {
@@ -45,29 +45,8 @@ rm(nga_base_ai, household_locations, hh_info)
 #-------------------------------------------------------------------------------
 
 # READ SHAPEFILES: 
-
-nigeria_0 <- st_read("shapefiles/nigeria_0")
 nigeria_1 <- st_read("shapefiles/nigeria_1")
 nigeria_2 <- st_read("shapefiles/nigeria_2")
-
-#-------------------------------------------------------------------------------
-
-# CREATE ADM2 SPATIAL ADJACENCY MATRIX: 
-
-# Firstly extract vector of LGA names: 
-row.names <- nigeria_2$lga
-
-# Create neighbours list: 
-nigeria_2_neigh <- poly2nb(nigeria_2, row.names = row.names, queen = TRUE)
-
-# Use neightbours list to create adjacency matrix:
-nigeria_2_adj <- nb2mat(nigeria_2_neigh, style = "B")
-
-# Set column names of adjacency matrix to equal row names:
-colnames(nigeria_2_adj) <- row.names
-
-# Tidy environment:
-rm(nigeria_2_neigh, row.names)
 
 #-------------------------------------------------------------------------------
 
@@ -82,25 +61,113 @@ nga_analysis_df_svy <- nga_analysis_df %>% as_survey_design(ids = c("ea", "hhid"
 # Calculate vitamin B12 inadequacy stratified by LGA - include variance of estimates: 
 vb12_inad_lga <- nga_analysis_df_svy %>% 
   group_by(lga) %>% 
-  summarise(vb12_inad = survey_mean(vb12_inadequate, 
+  summarise(vb12_inad_dir = survey_mean(vb12_inadequate, 
                                     na.rm = TRUE, 
                                     vartype = "var"))
 
+# Multiply vb12_inad by 100 to get percentage:
+vb12_inad_lga$vb12_inad_dir <- vb12_inad_lga$vb12_inad_dir * 100
+
+# Join to spatial data: 
+vb12_inad_lga <- nigeria_2 %>% 
+  left_join(vb12_inad_lga, by = c("lga" = "lga"))
+
 #-------------------------------------------------------------------------------
 
-# CALCULATE SMOOTHED ESTIMATES AT ADM2 LEVEL:
+# MAP DIRECT ESTIMATES OF VITAMIN B12 INADEQUACY: 
+plot_map <- function(data, col, title, metric, level) {
+  
+  # Create a map: 
+  map <- tm_shape(data) + 
+    tm_fill(col = col,
+            title = metric, 
+            style = "cont",
+            breaks = seq(0, 100, by = 10),
+            textNA = "Missing Data",
+            legend.is.portrait = F,
+            palette = wesanderson::wes_palette("Zissou1Continuous")) + 
+    tm_layout(main.title = title, frame = F, main.title.size = 0.8, 
+              main.title.position = "center", legend.outside.position = "bottom",
+              legend.outside.size = 0.35) +
+    tm_borders(lwd = 0) + 
+    tm_legend(show = T) +
+    tm_shape(nigeria_1) +
+    tm_borders(col = "black", lwd = 0.8)
+  
+  return(map)
+}
+
+direct_map <- plot_map(data = vb12_inad_lga, 
+                       col = "vb12_inad_dir", 
+                       title = "Vitamin B12 (direct estimates)", 
+                       metric = "Prevalence of inadequate intake (%)", 
+                       level = "lga")
+
+# tmap_save(direct_map, "outputs/maps/vb12_inad_direct.png", width = 8, height = 8, 
+#           units = "in", dpi = 600)
+
+rm(direct_map)
+
+#-------------------------------------------------------------------------------
+
+# CALCULATE SMOOTHED ESTIMATES OF VITAMIN B12 INADEQUACY - BYM MODEL
+
+# Remove entries from nigeria_2 that are not in the sample - decision at present
+# to only smooth estimates for areas that have observations. Can revisit later: 
+nigeria_2 <- nigeria_2[nigeria_2$lga %in% nga_analysis_df$lga,]
+
+# Define spatial object:
+geo <- as_Spatial(nigeria_2)
+
+# Define spatial adjacency matrix: 
+Amat <- poly2nb(geo, queen = TRUE)
+Amat <- nb2mat(Amat, style = "B")
+rownames(Amat) <- nigeria_2$lga
+colnames(Amat) <- nigeria_2$lga
+
+nigeria_2 <- list("geo" = geo, "Amat" = Amat)
+
+# Tidy environment: 
+rm(geo, Amat)
+
+# Convert from tbl_df to data.frame - IMPORTANT, DO NOT REMOVE: 
+nga_analysis_df <- data.frame(nga_analysis_df)
+
+# Fit generic smoothing model:
 smoothed_vb12_inad <- fitGeneric(data = nga_analysis_df,
-                                 geo = nigeria_2$geometry, 
-                                 Amat = nigeria_2_adj,
+                                 Amat = nigeria_2$Amat,
                                  responseType = "binary",
                                  responseVar = "vb12_inadequate",
                                  regionVar = "lga",
                                  strataVar = "state",
                                  weightVar = "survey_wgt",
                                  clusterVar = "~ea+hhid",
-                                 CI = 0.95)
+                                 nest = TRUE,
+                                 CI = 0.95, 
+                                 verbose = TRUE)
 
-# This function is currently not working due to the fact that some LGAs are not 
-# included in the sample and therefore do not exist in the analysis df. Could 
-# generate smoothed estimates ignoring these, but ideally would want to see if we
-# can generate estimates for non sampled areas (TO REVISIT TOMORROW).
+head(smoothed_vb12_inad$smooth)
+
+#-------------------------------------------------------------------------------
+
+# MAP SMOOTHED ESTIMATES: 
+vb12_smoothed <- smoothed_vb12_inad$smooth %>% 
+  dplyr::select(region, mean) %>% 
+  mutate(mean = mean * 100) %>% 
+  rename(lga = region,
+         vb12_inad_smoothed = mean)
+
+
+vb12_smoothed <- vb12_inad_lga %>%
+  left_join(vb12_smoothed, by = "lga")
+
+
+
+vitb12_lga_smooth <- plot_map(data = vb12_smoothed, 
+                       col = "vb12_inad_smoothed", 
+                       title = "Vitamin B12 (smoothed estimates)", 
+                       metric = "Prevalence of inadequate intake (%)", 
+                       level = "lga")
+
+vitb12_lga_smooth
+
