@@ -6,3 +6,7 @@ Where available, the MIMI team uses Household Consumption and Expenditure Survey
 
 This project explores whether stable estimates of inadequate micronutrient intake at the ADM2 level can be produced through the application of Bayesian spatial modelling techniques.
 
+This case study will use pre-processed household level nutritional adequacy data that has been prepared by the MIMI team using data from the Nigeria Living Standards Survey 2018-19: https://microdata.worldbank.org/index.php/catalog/3827
+
+## How to use this repository
+
