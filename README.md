@@ -10,3 +10,4 @@ This case study will use pre-processed household level nutritional adequacy data
 
 ## How to use this repository
 
+To be given access to the data required to run the scripts in this repository, please contact us at [HQ.MIMIGitHub@wfp.org](HQ.MIMIGitHub@wfp.org)
