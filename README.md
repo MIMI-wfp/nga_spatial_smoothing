@@ -16,3 +16,5 @@ The repository currently contains the following R scripts that perform the follo
 * `src/01apparent_intake_functions.R` - This script defines functions that will be required to compile the pre-processed MIMI data to calculate apparent household micronutrient intake.
 * `src/02indicator_preprocessing.R` - This script produces binary household micronutrient intake inadequacy variables.
 * `src/03adm2_estimates.R` - This script estimates and maps prevalence of inadequate micronutrient intake aggregated at the ADM2 (Local Government Area) level. A BYM2 model is implemented to produce smoothed prevalence estimates.
+
+Further work to follow...
