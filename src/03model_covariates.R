@@ -44,12 +44,14 @@ hh_info <- hh_info |>
 # educ_head variable requires feature engineering - transform into a factor 
 # variable with levels:
 # 1 = No school education, 2 = Primary education, 3 = Secondary education, 
-# 4 = Higher education
+# 4 = Higher education. 
+# Requirement for the individual to have completed that education level for it 
+# to be counted.
 hh_info <- hh_info |>  
   mutate(educ_head = case_when(
-    educ_head %in% c(0, 1, 2, 3) ~ 1,
-    educ_head %in% c(11, 12, 13, 14, 15, 16, 51, 52) ~ 2, 
-    educ_head %in% c(21, 22, 23, 24, 25, 26, 27, 28, 321) ~ 3,
+    educ_head %in% c(0, 1, 2, 3, 11, 12, 13, 14, 15) ~ 1,
+    educ_head %in% c(16, 21, 22, 23, 24, 25, 51, 52) ~ 2, 
+    educ_head %in% c(26, 27, 28, 321) ~ 3,
     educ_head %in% c(31, 33, 34, 35, 41, 43, 61, 322, 411, 412, 421, 422, 423, 424) ~ 4,
     TRUE ~ NA_real_
   ))
