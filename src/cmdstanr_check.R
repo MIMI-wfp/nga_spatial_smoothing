@@ -3,16 +3,18 @@
 # If you don't have any c++ tool chain installed, see https://mc-stan.org/docs/cmdstan-guide/installation.html#macos
 
 # Run this in a fresh R session or restarting your current session
-install.packages("cmdstanr", repos = c('https://stan-dev.r-universe.dev', getOption("repos")))
+# install.packages("cmdstanr", repos = c('https://stan-dev.r-universe.dev', getOption("repos")))
+
 # re-start R
 library(cmdstanr)
 # Check if you have appropriate C++ tool chain
 check_cmdstan_toolchain()
 # If the version is not specified, the newest available will be installed. 
 # I had some issues with the newest version so I'd recommend 2.34.1!
-install_cmdstan(version = "2.34.1")
-# check path which cmdstan is installed at, by running cmdstan_path()
+install_cmdstan(version = "2.34.1", overwrite = TRUE)
 
+# check path which cmdstan is installed at, by running cmdstan_path()
+cmdstan_path()
 
 # Check if cmdstan and cmdstanr is properly installed by running an example
 file <- file.path(cmdstan_path(), "examples", "bernoulli", "bernoulli.stan")
