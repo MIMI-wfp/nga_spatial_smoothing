@@ -37,15 +37,17 @@ rm(list = setdiff(ls(), c("nga_base_ai", "allen_ear")))
 
 #-------------------------------------------------------------------------------
 
-# Binarise vitamin B12 inadequacy: 
+# Binarise Vitamin A, Folate and Vitamin B12 inadequacy: 
+nga_base_ai$vita_rae_inadequate <- ifelse(nga_base_ai$vita_rae_mcg < allen_ear$ear_value[allen_ear$nutrient == "vita_rae_mcg"], 1, 0)
+nga_base_ai$folate_inadequate <- ifelse(nga_base_ai$folate_mcg < allen_ear$ear_value[allen_ear$nutrient == "folate_mcg"], 1, 0)
 nga_base_ai$vb12_inadequate <- ifelse(nga_base_ai$vitb12_mcg < allen_ear$ear_value[allen_ear$nutrient == "vitb12_mcg"], 1, 0)
 
-# At present, we will include only the Vitamin B12 inadequacy indicator, 
-# however as we consolidate our stategy of analysis, we will include other 
-# micronutrients.
+
+# Vitamin A, Folate and Vitamin B12 inadequacy variables prepared.
+# Zinc and Iron inadequacy to be done when Mo returns from BIS.
 
 nga_base_ai <- nga_base_ai %>% 
-  dplyr::select(hhid, vb12_inadequate)
+  dplyr::select(hhid, vita_rae_inadequate, folate_inadequate, vb12_inadequate)
 
 # Tidy environment: 
 rm(list = setdiff(ls(), c("nga_base_ai")))
