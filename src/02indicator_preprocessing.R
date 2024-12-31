@@ -49,8 +49,23 @@ nga_base_ai$vb12_inadequate <- ifelse(nga_base_ai$vitb12_mcg < allen_ear$ear_val
 nga_base_ai <- nga_base_ai %>% 
   dplyr::select(hhid, vita_rae_inadequate, folate_inadequate, vb12_inadequate)
 
+#-------------------------------------------------------------------------------
+
+# Extract data on binarised household food group consumption. These variables can 
+# be used for model validation: 
+
+nga_food_groups <- read_csv("processed_data/nga_lss1819_food_consumption.csv")
+
+# Animal-sourced food consumption (dairy, eggs, meat, poultry, fish):
+nga_asf <- nga_food_groups |> 
+  mutate(asf = ifelse(food_group %in% c("dairy", "eggs", "meat_poultry_fish"), 1, 0)) |> 
+  group_by(hhid) |>
+  summarise(asf = ifelse(sum(asf) > 0, 1, 0))
+
+#-------------------------------------------------------------------------------
+
 # Tidy environment: 
-rm(list = setdiff(ls(), c("nga_base_ai")))
+rm(list = setdiff(ls(), c("nga_base_ai", "nga_asf")))
 
 ################################################################################
 ############################### END OF SCRIPT ##################################
