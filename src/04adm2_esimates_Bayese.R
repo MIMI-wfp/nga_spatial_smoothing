@@ -16,7 +16,7 @@
 # INSTALL AND LOAD PACKAGES:
 
 rq_packages <- c("readr", "readxl","tidyverse", "srvyr", "sf", "spdep", "tmap", "INLA", 
-                 "SUMMER", "wesanderson", "cmdstanr", "ggplot2")
+                 "SUMMER", "wesanderson", "cmdstanr", "ggplot2", "ggrepel","ggpubr")
 
 installed_packages <- rq_packages %in% rownames(installed.packages())
 if (any(installed_packages == FALSE)) {
@@ -65,7 +65,6 @@ vb12_inad_lga <- nga_analysis_df %>%
 #-------------------------------------------------------------------------------
 
 # CALCULATE DESIGN-BASED (DIRECT) ESTIMATES AT ADM2 LEVEL: 
-
 # Firstly need to create a tbl_svy object to be used for analysis.
 nga_analysis_df_svy <- nga_analysis_df %>% as_survey_design(ids = c("ea", "hhid"),
                                                             strata = "state",
@@ -126,7 +125,7 @@ nigeria_2$lga_id <- 1:nrow(nigeria_2)#as.integer(as.factor(nigeria_2$lga))
 vb12_inad_lga <- nigeria_2 %>% 
   left_join(vb12_inad_lga, by = c("lga" = "lga"))
 
-# Perpare data for 
+# Prepare data for 
 # Define spatial object:
 geo <- as_Spatial(nigeria_2)
 
@@ -141,7 +140,7 @@ qc = rep(0,length(prep$n1))
 for (i in 1:length(prep$n1)){
   qc[i] = Amat[prep$n1[i],prep$n2[i]]
 }
-mean(qc) # shuold be 1
+mean(qc) # should be 1
 
 #vb12_inad_lga_complete <- vb12_inad_lga |> filter(!is.na(vb12_inad_dir_var),d!=0,vb12_inad_dir_var>1e-10)
 vb12_inad_lga_complete2 <- vb12_inad_lga |> filter(!is.na(vb12_inad_wdir_var),degf!=0,vb12_inad_wdir_var>1e-10) 
@@ -240,6 +239,7 @@ vb12_inad_lga_complete$vb12_inad_naive_var|> hist(breaks = 20)
 vb12_inad_lga$vb12_inad_naive <- vb12_inad_lga$vb12_inad_naive * 100
 vb12_inad_lga$vb12_inad_dir <- vb12_inad_lga$vb12_inad_dir * 100
 vb12_inad_lga$v12_inad_post_mean <- vb12_inad_lga$v12_inad_post_mean * 100
+
 plot_map <- function(data, col, title, metric, level) {
   
   # Create a map: 
@@ -351,126 +351,4 @@ vb12_var_smoothed_FB <- plot_map(data = vb12_inad_lga,
 
 vb12_var_smoothed_FB
 
-
-#-------------------------------------------------------------------------------
-alpha = 0.1
-
-vb12_inad_lga$vb12_inad_wdir_lower90_wilson <- wilson_lower(vb12_inad_lga$vb12_inad_wdir, vb12_inad_lga$n_eff,alpha = alpha)
-vb12_inad_lga$vb12_inad_wdir_upper90_wilson <- wilson_upper(vb12_inad_lga$vb12_inad_wdir, vb12_inad_lga$n_eff,alpha = alpha)
-vb12_inad_lga$vb12_inad_wdir_ci_length90_wilson <- vb12_inad_lga$vb12_inad_wdir_upper90_wilson - vb12_inad_lga$vb12_inad_wdir_lower90_wilson 
-mean(vb12_inad_lga$vb12_inad_wdir_ci_length90_wilson, na.rm = T)
-vb12_inad_lga$vb12_inad_wdir_lower90_wald <- (vb12_inad_lga$vb12_inad_wdir - qnorm(1-alpha/2)*sqrt(vb12_inad_lga$vb12_inad_wdir_var))
-vb12_inad_lga$vb12_inad_wdir_upper90_wald <- (vb12_inad_lga$vb12_inad_wdir + qnorm(1-alpha/2)*sqrt(vb12_inad_lga$vb12_inad_wdir_var))
-vb12_inad_lga$vb12_inad_wdir_ci_length90_wald<- vb12_inad_lga$vb12_inad_wdir_upper90_wald - vb12_inad_lga$vb12_inad_wdir_lower90_wald 
-mean(vb12_inad_lga$vb12_inad_wdir_ci_length90_wald, na.rm = T)
-
-df_quantile =  apply(df_p[,1:nrow(vb12_inad_lga)], 2 , quantile , probs = c(alpha/2,1-alpha/2) , na.rm = TRUE ) |> t()
-vb12_inad_lga$vb12_inad_post_lower90 <- df_quantile[,1]
-vb12_inad_lga$vb12_inad_post_upper90 <- df_quantile[,2]
-vb12_inad_lga$vb12_inad_post_ci_length90<- vb12_inad_lga$vb12_inad_post_upper90 - vb12_inad_lga$vb12_inad_post_lower90 
-mean(vb12_inad_lga$vb12_inad_post_ci_length90, na.rm = T)
-#-------------------------------------------------------------------------------
-vb12_inad_lga$int_overlap <-check_overlap(vb12_inad_lga$vb12_inad_wdir_lower90_wald,vb12_inad_lga$vb12_inad_wdir_upper90_wald,
-              vb12_inad_lga$vb12_inad_post_lower90,vb12_inad_lga$vb12_inad_post_upper90)
-mean(vb12_inad_lga$int_overlap[!vb12_inad_lga$vb12_inad_wdir%in%c(0.0,1.0)], na.rm=T)
-#-------------------------------------------------------------------------------
-# Get adm1 estimates 
-adm2_pop <- read_csv(here("processed_data","population_by_lga.csv"))
-adm2_pop <- adm2_pop |> group_by(adm1_name) |> 
-  reframe(lga = lga,lga_id = lga_id,pop_adm2 = pop_total,pop_adm1 = sum(pop_total))  |>
-  mutate(geo_weight = pop_adm2/pop_adm1) 
-
-# vb12_inad_lga <- vb12_inad_lga |> 
-#   left_join(adm2_pop |> mutate(lga_id2 = lga_id, state = adm1_name) |> select(state, lga, lga_id2, prop_pop_adm2) , by = 'lga')
-# #vb12_inad_lga <- vb12_inad_lga |> select(-state, -lga_id2, -pop_total)
-
-nga_analysis_df <- nga_analysis_df |> 
-  left_join((nga_analysis_df|>
-               group_by(state) |>
-               reframe(hhid = hhid,
-                       survey_wgt=survey_wgt,
-                       sum_wgt = sum(survey_wgt),
-                       norm_survey_wgt_state = survey_wgt/sum_wgt) |>
-               select(-state, -survey_wgt,-sum_wgt)),
-            by = 'hhid'
-  ) 
-
-
-vb12_inad_state <- nga_analysis_df |> filter(lga!="bakassi") |> group_by(state) |>
-  summarise(n_obs = n(),
-            n_eff = 1/sum(norm_survey_wgt_state^2),
-            degf = (n_eff-1),
-            vb12_inad_wdir =  weighted.mean(vb12_inadequate, norm_survey_wgt_state),
-            vb12_inad_wdir_var = vb12_inad_wdir*(1-vb12_inad_wdir)/degf
-            
-            )
-vb12_inad_state$vb12_inad_wdir_lower90_wilson <- wilson_lower(vb12_inad_state$vb12_inad_wdir, vb12_inad_state$n_eff,alpha = alpha)
-vb12_inad_state$vb12_inad_wdir_upper90_wilson <- wilson_upper(vb12_inad_state$vb12_inad_wdir, vb12_inad_state$n_eff,alpha = alpha)
-vb12_inad_state$vb12_inad_wdir_ci_length90_wilson <- vb12_inad_state$vb12_inad_wdir_upper90_wilson - vb12_inad_state$vb12_inad_wdir_lower90_wilson 
-mean(vb12_inad_state$vb12_inad_wdir_ci_length90_wilson, na.rm = T)
-vb12_inad_state$vb12_inad_wdir_lower90_wald <- (vb12_inad_state$vb12_inad_wdir - qnorm(1-alpha/2)*sqrt(vb12_inad_state$vb12_inad_wdir_var))
-vb12_inad_state$vb12_inad_wdir_upper90_wald <- (vb12_inad_state$vb12_inad_wdir + qnorm(1-alpha/2)*sqrt(vb12_inad_state$vb12_inad_wdir_var))
-vb12_inad_state$vb12_inad_wdir_ci_length90_wald<- vb12_inad_state$vb12_inad_wdir_upper90_wald - vb12_inad_state$vb12_inad_wdir_lower90_wald 
-mean(vb12_inad_state$vb12_inad_wdir_ci_length90_wald, na.rm = T)
-
-df_post <- cbind(vb12_inad_lga |> select(state,lga,lga_id),t(df_p[,1:nrow(vb12_inad_lga)])) |> 
-  left_join(adm2_pop |> mutate(lga_id2 = lga_id) |> select(lga, lga_id2, geo_weight) , 
-            by = 'lga') |> filter(lga!="bakassi")
-### ---> should remove lga not included in the original data and recalculate the population weights? 
-df_post_state <- df_post |> as.data.frame() |> select(-geometry) |> group_by(state) |>
-  summarise(across(all_of(colnames(df_post)[grepl('X',colnames(df_post))]), ~ weighted.mean(., w = geo_weight))) 
-df_post_state$vb12_inad_post_mean <- df_post_state[,2:nrow(df_p)] |> rowMeans()
-df_quantile =  apply(df_post_state[,2:nrow(df_p)], 1 , quantile , probs = c(alpha/2,1-alpha/2) , na.rm = TRUE ) |> t()
-df_post_state$vb12_inad_post_lower90 <- df_quantile[,1]
-df_post_state$vb12_inad_post_upper90 <- df_quantile[,2]
-df_post_state$vb12_inad_posr_ci_length90 <- df_post_state$vb12_inad_post_upper90 - df_post_state$vb12_inad_post_lower90 
-mean(df_post_state$vb12_inad_posr_ci_length90)
-vb12_inad_state  <- vb12_inad_state |> left_join((df_post_state|> select(-colnames(df_post)[grepl('X',colnames(df_post))])), by = 'state')
-
-mean(abs(vb12_inad_state$vb12_inad_wdir - vb12_inad_state$vb12_inad_post_mean))
-vb12_inad_state$int_overlap <-check_overlap(vb12_inad_state$vb12_inad_wdir_lower90_wald,vb12_inad_state$vb12_inad_wdir_upper90_wald,
-                                          vb12_inad_state$vb12_inad_post_lower90,vb12_inad_state$vb12_inad_post_upper90)
-mean(vb12_inad_state$int_overlap)
-vb12_inad_state$bias = vb12_inad_state$vb12_inad_post_mean - vb12_inad_state$vb12_inad_wdir 
-mean(abs(vb12_inad_state$bias))
-write_csv(vb12_inad_state, here("processed_data","state_level_estimates.csv"))
-#-------------------------------------------------------------------------------
-vb12_inad_state <- vb12_inad_state |> left_join(nigeria_1|> select(state, geometry), by='state')
-vb12_inad_state <- st_as_sf(vb12_inad_state)
-p = ggplot(vb12_inad_state |> st_as_sf()
-           , aes(fill = vb12_inad_post_mean)) +
-  geom_sf() +
-  #facet_wrap(~Age) +
-  scale_fill_gradientn(values = c("1","0.8","0.6","0.4","0.2","0"), 
-                       colors = c("red4","red3","#FC4E07","#E7B800","green4"),
-                       limits=c(0,1))+
-  labs(title='Full Bayse estimate',fill = "VB12 deficiency")+
-  theme_minimal(base_size = 14) 
-p
-#ggsave(here("outputs","maps",paste0("vb12_inad_state_FB.png")), p, width = 10, height = 10,bg = "white")
-
-p = ggplot(vb12_inad_state |> st_as_sf()
-           , aes(fill = vb12_inad_wdir)) +
-  geom_sf() +
-  #facet_wrap(~Age) +
-  scale_fill_gradientn(values = c("1","0.8","0.6","0.4","0.2","0"), 
-                       colors = c("red4","red3","#FC4E07","#E7B800","green4"),
-                       limits=c(0,1))+
-  labs(title='Direct estimate',fill = "VB12 deficiency")+
-  theme_minimal(base_size = 14) 
-p
-#ggsave(here("outputs","maps",paste0("vb12_inad_state_direct.png")), p, width = 10, height = 10,bg = "white")
-
-p = ggplot(vb12_inad_state |> st_as_sf()
-           , aes(fill = bias)) +
-  geom_sf() +
-  #facet_wrap(~Age) +
-  scale_fill_gradient2(  high = "tomato",
-                         mid = "white",
-                         low = "royalblue") +
-  # scale_fill_gradientn(values = c("-0.3","-0.15","0","0.15","0.3"), 
-  #                      colors = c("red4","red3","#FC4E07","#E7B800","green4"))+
-  labs(title='Bias')+
-  theme_minimal(base_size = 14) 
-p
-ggsave(here("outputs","maps",paste0("vb12_inad_state_bias.png")), p, width = 10, height = 10,bg = "white")
+#£ ---  End of Script---
