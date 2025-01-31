@@ -20,7 +20,7 @@ data{
     array[NS] int<lower=1,upper=N> adm2_index; //index
     array[NS] real<lower=0, upper =1> p_hat; // direct estimate of prevalence
     array[NS] real<lower=0> v_hat; // direct estimate of variance
-    array[NS] int<lower=0> d; // defree of freedom in each area, at admin2 level ;
+    array[NS] real<lower=0> d; // degree of freedom in each area, at admin2 level ; 
     array[NS] int<lower=0> k; //number of respondants in each area, at admin2 level 
 
     int<lower=1> N_edges ; 
@@ -65,5 +65,4 @@ model{
     target += normal_lpdf(gamma0|0,1);
     target += normal_lpdf(gamma1|1,0.5);
     target += normal_lpdf(gamma2|-1, 0.5);
-
 }

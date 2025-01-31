@@ -4,7 +4,7 @@
 
 # Author: Sahoko Ishida
 # Date created: 07-11-2024
-# Last edited: 09-12-2024
+# Last edited: 31-01-2024
 
 # This script is to check 
 
@@ -31,8 +31,10 @@ source("src/helper_functions.R")
 
 # --- Read data ----------------------
 # Stan
-stan_csv_filenames <- c(here('outputs','mcmc','stan_postsample_BYM2-202412100143-1-32641f.csv'),
-                        here('outputs','mcmc','stan_postsample_BYM2-202412100143-2-32641f.csv'))
+stan_csv_filenames <- readRDS(here('outputs','mcmc','csv_files_postsample_vb12_BYM2.rds'))
+# stan_csv_filenames <- c(here('outputs','mcmc','stan_postsample_BYM2_synthetic-202501311100-1-959a29.csv'),
+#                         here('outputs','mcmc','stan_postsample_BYM2_synthetic-202501311100-2-959a29.csv'))
+
 stanfit <- as_cmdstan_fit(stan_csv_filenames)
 
 # Read in household locations that are matched to shapefiles: 
@@ -60,6 +62,24 @@ vb12_inad_lga <- nga_analysis_df %>%
   group_by(lga) %>% 
   summarise(vb12_inad_naive = mean(vb12_inadequate, na.rm = TRUE),
             vb12_inad_naive_var = var(vb12_inadequate, na.rm = TRUE))
+#-------------------------------------------------------------------------------
+# 1 split data into two 
+lga_01 <- (vb12_inad_lga |> filter(vb12_inad_naive%in%c(0,1)) |> select(lga))$lga
+
+nga_analysis_01 <- nga_analysis_df |> filter(lga%in%lga_01)
+nga_analysis_rest <- nga_analysis_df |> filter(!lga%in%lga_01)
+i = 0
+for (eachlga in lga_01){
+  i = i+1
+  df_tmp <- nga_analysis_01 |> filter(lga==eachlga) 
+  df_synthetic <- df_tmp[sample(nrow(df_tmp),1),] |> 
+    mutate(vb12_inadequate = abs(vb12_inadequate -1 ),
+           hhid = i)
+  nga_analysis_01 <- bind_rows(nga_analysis_01,df_synthetic)
+}
+nga_analysis_01 <- nga_analysis_01 |> arrange(ea, hhid, vb12_inadequate)
+nga_analysis_df <- bind_rows(nga_analysis_rest,nga_analysis_01)|> arrange(ea, hhid, vb12_inadequate)
+#-------------------------------------------------------------------------------
 
 # CALCULATE DESIGN-BASED (DIRECT) ESTIMATES AT ADM2 LEVEL: 
 # Firstly need to create a tbl_svy object to be used for analysis.
@@ -157,7 +177,13 @@ vb12_inad_state <- nga_analysis_df |> filter(lga!="bakassi") |> group_by(state) 
             degf = (n_eff-1),
             vb12_inad_wdir =  weighted.mean(vb12_inadequate, norm_survey_wgt_state),
             vb12_inad_wdir_var = vb12_inad_wdir*(1-vb12_inad_wdir)/degf
-  )
+  ) |>
+  left_join((nga_analysis_df |> filter(lga!="bakassi") |> 
+              select(state, lga) |> unique() |> 
+              group_by(state) |> summarise(n_lga = n())),
+            by = 'state'
+            )
+
 vb12_inad_state$vb12_inad_wdir_lower90_wilson <- wilson_lower(vb12_inad_state$vb12_inad_wdir, vb12_inad_state$n_eff,alpha = alpha)
 vb12_inad_state$vb12_inad_wdir_upper90_wilson <- wilson_upper(vb12_inad_state$vb12_inad_wdir, vb12_inad_state$n_eff,alpha = alpha)
 vb12_inad_state$vb12_inad_wdir_ci_length90_wilson <- vb12_inad_state$vb12_inad_wdir_upper90_wilson - vb12_inad_state$vb12_inad_wdir_lower90_wilson 
@@ -186,11 +212,12 @@ vb12_inad_state  <- vb12_inad_state |> left_join((df_post_state|> select(-colnam
 mean(abs(vb12_inad_state$vb12_inad_wdir - vb12_inad_state$vb12_inad_post_mean))
 vb12_inad_state$int_overlap <-check_overlap(vb12_inad_state$vb12_inad_wdir_lower90_wald,vb12_inad_state$vb12_inad_wdir_upper90_wald,
                                             vb12_inad_state$vb12_inad_post_lower90,vb12_inad_state$vb12_inad_post_upper90)
-vb12_inad_state$bias = vb12_inad_state$vb12_inad_post_mean - vb12_inad_state$vb12_inad_wdir 
+vb12_inad_state$error = vb12_inad_state$vb12_inad_post_mean - vb12_inad_state$vb12_inad_wdir 
 
 mean(vb12_inad_state$int_overlap)
-mean(abs(vb12_inad_state$bias))
-write_csv(vb12_inad_state, here("processed_data","state_level_estimates.csv"))
+mean(abs(vb12_inad_state$error))
+write_csv(vb12_inad_state, here("processed_data","state_level_estimates_withSynthetic.csv"))
+
 #-------------------------------------------------------------------------------
 # Plots
 #-------------------------------------------------------------------------------
@@ -206,7 +233,7 @@ p = ggplot(vb12_inad_state |> st_as_sf()
   labs(title='Full Bayse estimate',fill = "VB12 deficiency")+
   theme_minimal(base_size = 14) 
 p
-#ggsave(here("outputs","maps",paste0("vb12_inad_state_FB.png")), p, width = 10, height = 10,bg = "white")
+ggsave(here("outputs","maps",paste0("vb12_inad_state_FB.png")), p, width = 10, height = 10,bg = "white")
 
 p = ggplot(vb12_inad_state |> st_as_sf()
            , aes(fill = vb12_inad_wdir)) +
@@ -218,18 +245,26 @@ p = ggplot(vb12_inad_state |> st_as_sf()
   labs(title='Direct estimate',fill = "VB12 deficiency")+
   theme_minimal(base_size = 14) 
 p
-#ggsave(here("outputs","maps",paste0("vb12_inad_state_direct.png")), p, width = 10, height = 10,bg = "white")
+ggsave(here("outputs","maps",paste0("vb12_inad_state_direct.png")), p, width = 10, height = 10,bg = "white")
 
 p = ggplot(vb12_inad_state |> st_as_sf()
-           , aes(fill = int_overlap)) +
+           , aes(fill = int_overlap,label = str_to_title(state))) +
   geom_sf() +
+  #geom_sf_text(fun.geometry = sf::st_centroid) + # make Manhattan behave itself
   labs(title='Coverage')+
   theme_minimal(base_size = 14) 
 p
-#ggsave(here("outputs","maps",paste0("vb12_inad_state_coverage.png")), p, width = 10, height = 10,bg = "white")
+ggsave(here("outputs","maps",paste0("vb12_inad_state_coverage.png")), p, width = 10, height = 10,bg = "white")
 
 p = ggplot(vb12_inad_state |> st_as_sf()
-           , aes(fill = bias)) +
+           , aes(fill = n_lga)) +
+  geom_sf() +
+  labs(title='Number of LGAs')+
+  theme_minimal(base_size = 14) 
+p
+
+p = ggplot(vb12_inad_state |> st_as_sf()
+           , aes(fill = error)) +
   geom_sf() +
   #facet_wrap(~Age) +
   scale_fill_gradient2(  high = "tomato",
@@ -237,18 +272,19 @@ p = ggplot(vb12_inad_state |> st_as_sf()
                          low = "royalblue") +
   # scale_fill_gradientn(values = c("-0.3","-0.15","0","0.15","0.3"), 
   #                      colors = c("red4","red3","#FC4E07","#E7B800","green4"))+
-  labs(title='Bias')+
+  labs(title='Error')+
   theme_minimal(base_size = 14) 
 p
-#ggsave(here("outputs","maps",paste0("vb12_inad_state_bias.png")), p, width = 10, height = 10,bg = "white")
+ggsave(here("outputs","maps",paste0("vb12_inad_state_error.png")), p, width = 10, height = 10,bg = "white")
 
 p <- ggplot(vb12_inad_state,aes(x=vb12_inad_post_mean,y=vb12_inad_wdir,label = str_to_title(state))) +
-  geom_point()+
+  geom_point(aes(color = int_overlap))+
   geom_abline(slope = 1,intercept = 0, linetype=2)+
   ggrepel::geom_text_repel()+
   xlim(0,1) + ylim(0,1)+
   labs(x='FB modelled estimates',y='Direct Estimates')+
   theme_minimal(base_size = 14)
+p
 ggsave(here("outputs","maps",paste0("vb12_inad_state_scatter.png")), p, width = 10, height = 10,bg = "white")
 
 df_plot <- data.frame(
@@ -262,10 +298,9 @@ for (i in 1:37){
   p = ggplot(df_plot |> filter(state==unique(df_plot$state[i])), aes(y = y_est,x= type)) +
     geom_linerange(aes(ymin=upper,ymax=lower))+
     geom_point()+
-    #facet_grid(~state)+
+    ggtitle(str_to_title(df_plot$state[i]))+
     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
     theme_minimal(base_size = 14) 
   print(p)
 }
-
 
