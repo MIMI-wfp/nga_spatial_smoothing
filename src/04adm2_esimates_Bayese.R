@@ -4,7 +4,7 @@
 
 # Author: Sahoko Ishida
 # Date created: 07-11-2024
-# Last edited: 09-12-2024
+# Last edited: 31-01-2025
 
 # In this script, I will generate both smoothed ADM2 level estimates
 # for inadequate intake of vitamin B12 in Nigeria. 
@@ -64,6 +64,25 @@ vb12_inad_lga <- nga_analysis_df %>%
 
 #-------------------------------------------------------------------------------
 
+# ADD A SYNTHETIC HOUSEHOLD TO LGAs WHERE ALL HOUSEHOLDS ARE IN ONE CATEGORY
+# skip this step if no artificial data should be added
+# 1 split data into two 
+lga_01 <- (vb12_inad_lga |> filter(vb12_inad_naive%in%c(0,1)) |> select(lga))$lga
+nga_analysis_01 <- nga_analysis_df |> filter(lga%in%lga_01)
+nga_analysis_rest <- nga_analysis_df |> filter(!lga%in%lga_01)
+set.seed(1234)
+i = 0
+for (eachlga in lga_01){
+  i = i+1
+  df_tmp <- nga_analysis_01 |> filter(lga==eachlga) 
+  df_synthetic <- df_tmp[sample(nrow(df_tmp),1),] |> 
+    mutate(vb12_inadequate = abs(vb12_inadequate -1 ),
+           hhid = i)
+  nga_analysis_01 <- bind_rows(nga_analysis_01,df_synthetic)
+}
+nga_analysis_df <- bind_rows(nga_analysis_rest,nga_analysis_01)|> arrange(ea, hhid)
+#-------------------------------------------------------------------------------
+
 # CALCULATE DESIGN-BASED (DIRECT) ESTIMATES AT ADM2 LEVEL: 
 # Firstly need to create a tbl_svy object to be used for analysis.
 nga_analysis_df_svy <- nga_analysis_df %>% as_survey_design(ids = c("ea", "hhid"),
@@ -115,11 +134,7 @@ vb12_inad_lga <- vb12_inad_lga |>
              )
 
 # Give adm2_index
-nigeria_2$lga_id <- 1:nrow(nigeria_2)#as.integer(as.factor(nigeria_2$lga))
-
-# Multiply vb12_inad by 100 to get percentage:
-#vb12_inad_lga$vb12_inad_naive <- vb12_inad_lga$vb12_inad_naive * 100
-#vb12_inad_lga$vb12_inad_dir <- vb12_inad_lga$vb12_inad_dir * 100
+nigeria_2$lga_id <- 1:nrow(nigeria_2)
 
 # Join spatial data: 
 vb12_inad_lga <- nigeria_2 %>% 
@@ -142,38 +157,26 @@ for (i in 1:length(prep$n1)){
 }
 mean(qc) # should be 1
 
-#vb12_inad_lga_complete <- vb12_inad_lga |> filter(!is.na(vb12_inad_dir_var),d!=0,vb12_inad_dir_var>1e-10)
-vb12_inad_lga_complete2 <- vb12_inad_lga |> filter(!is.na(vb12_inad_wdir_var),degf!=0,vb12_inad_wdir_var>1e-10) 
+
+### removing all LGAs with only one EA 
+#vb12_inad_lga_complete<- vb12_inad_lga |> filter(!is.na(vb12_inad_dir_var),d!=0,vb12_inad_dir_var>1e-10) # ALL LGA
+vb12_inad_lga_complete <- vb12_inad_lga |> filter(!is.na(vb12_inad_wdir_var),degf!=0,vb12_inad_wdir_var>1e-10) 
 
 stanfile <- here('src','areal_level_BYM2.stan')
 mod <- cmdstan_model(stanfile)
-# data_list <- list(
-#   N = nrow(vb12_inad_lga),
-#   NS = nrow(vb12_inad_lga_complete),
-#   adm2_index = vb12_inad_lga_complete$lga_id,
-#   p_hat = vb12_inad_lga_complete$vb12_inad_dir,
-#   v_hat = vb12_inad_lga_complete$vb12_inad_dir_var,
-#   d = vb12_inad_lga_complete$d, 
-#   k = vb12_inad_lga_complete$k,
-#   N_edges = length(prep$n1),
-#   node1 = prep$n1,
-#   node2 = prep$n2,
-#   scaling_factor = prep$scaling_factor
-# )
 data_list <- list(
   N = nrow(vb12_inad_lga),
-  NS = nrow(vb12_inad_lga_complete2),
-  adm2_index = vb12_inad_lga_complete2$lga_id,
-  p_hat = vb12_inad_lga_complete2$vb12_inad_wdir,
-  v_hat = vb12_inad_lga_complete2$vb12_inad_wdir_var,
-  d = vb12_inad_lga_complete2$degf, 
-  k = vb12_inad_lga_complete2$n_obs,
+  NS = nrow(vb12_inad_lga_complete),
+  adm2_index = vb12_inad_lga_complete$lga_id,
+  p_hat = vb12_inad_lga_complete$vb12_inad_wdir,
+  v_hat = vb12_inad_lga_complete$vb12_inad_wdir_var,
+  d = vb12_inad_lga_complete$degf, 
+  k = vb12_inad_lga_complete$n_obs,
   N_edges = length(prep$n1),
   node1 = prep$n1,
   node2 = prep$n2,
   scaling_factor = prep$scaling_factor
 )
-
 # MCMC
 fit <- mod$sample(
   data = data_list,
@@ -186,7 +189,9 @@ fit <- mod$sample(
   refresh = 50 # print update every 50 iters
 )
 
-fit$save_output_files(dir = here('outputs','mcmc'), basename = "stan_postsample_BYM2")
+fit$save_output_files(dir = here('outputs','mcmc'), basename = "stan_postsample_vb12_BYM2")
+csv_files <- fit$output_files()
+saveRDS(csv_files,here('outputs','mcmc','csv_files_postsample_vb12_BYM2.rds'))
 
 post_samples = fit$draws(format = "df",  inc_warmup = F)
 post_samples$chain = as.character(post_samples$.chain)
@@ -194,7 +199,6 @@ colnames(post_samples) <- colnames(post_samples) %>%
   gsub("\\[", "_", .) %>%
   gsub("\\]", "", .) %>%
   gsub(",","_", .)
-
 
 for (param in colnames(post_samples)[2:10]){
   dat = post_samples#[post_samples$chain==2,]
@@ -215,14 +219,12 @@ colnames(df_v) <- colnames(df_v) %>%
   gsub("\\]", "", .) %>%
   gsub(",","_", .)
 
-
 for (param in colnames(df_p)[1:10]){
   dat = df_p
   gg = ggplot(data=dat, aes_string(x=".iteration", y = param, color="chain"))+
     geom_line() + theme_minimal() 
   print(gg)
 }
-
 
 vb12_inad_lga$vb12_inad_post_mean <- df_p[,1:nrow(vb12_inad_lga)] |> colMeans() |> unname()
 vb12_inad_lga$vb12_inad_post_var <-  sapply(df_p[,1:nrow(vb12_inad_lga)],var) |> unname()
@@ -232,13 +234,13 @@ for (param in colnames(df_v)[1:10]){
     geom_line() + theme_minimal() 
   print(gg)
 }
-df_v[,1:543] |> colMeans() |> hist(breaks = 20)
-vb12_inad_lga_complete$vb12_inad_dir_var|> hist(breaks = 20)
-vb12_inad_lga_complete$vb12_inad_naive_var|> hist(breaks = 20)
+# df_v[,1:543] |> colMeans() |> hist(breaks = 20)
+# vb12_inad_lga_complete$vb12_inad_dir_var|> hist(breaks = 20)
+# vb12_inad_lga_complete$vb12_inad_naive_var|> hist(breaks = 20)
 
 vb12_inad_lga$vb12_inad_naive <- vb12_inad_lga$vb12_inad_naive * 100
 vb12_inad_lga$vb12_inad_dir <- vb12_inad_lga$vb12_inad_dir * 100
-vb12_inad_lga$v12_inad_post_mean <- vb12_inad_lga$v12_inad_post_mean * 100
+vb12_inad_lga$vb12_inad_post_mean <- vb12_inad_lga$vb12_inad_post_mean * 100
 
 plot_map <- function(data, col, title, metric, level) {
   
@@ -283,19 +285,18 @@ direct_map
 # tmap_save(direct_map, "outputs/maps/vb12_inad_direct.png", width = 8, height = 8,
 #           units = "in", dpi = 600)
 
-
-vb12_inad_lga_tmp <- vb12_inad_lga
-vb12_inad_lga_tmp$vb12_inad_wdir[vb12_inad_lga$degf==0|vb12_inad_lga$vb12_inad_wdir_var<1e-10] = NA
-vb12_inad_lga_tmp$vb12_inad_wdir = vb12_inad_lga_tmp$vb12_inad_wdir*100
-direct_map2 <- plot_map(data = vb12_inad_lga_tmp , 
-                       col = "vb12_inad_wdir", 
-                       title = "Vitamin B12 (design-based estimates)", 
-                       metric = "Prevalence of inadequate intake (%)", 
-                       level = "lga")
-
-direct_map2
-tmap_save(direct_map2, "outputs/maps/vb12_inad_direct_01rm.png", width = 8, height = 8,
-          units = "in", dpi = 600)
+# vb12_inad_lga_tmp <- vb12_inad_lga
+# vb12_inad_lga_tmp$vb12_inad_wdir[vb12_inad_lga$degf==0|vb12_inad_lga$vb12_inad_wdir_var<1e-10] = NA
+# vb12_inad_lga_tmp$vb12_inad_wdir = vb12_inad_lga_tmp$vb12_inad_wdir*100
+# direct_map2 <- plot_map(data = vb12_inad_lga_tmp , 
+#                        col = "vb12_inad_wdir", 
+#                        title = "Vitamin B12 (design-based estimates)", 
+#                        metric = "Prevalence of inadequate intake (%)", 
+#                        level = "lga")
+# 
+# direct_map2
+# tmap_save(direct_map2, "outputs/maps/vb12_inad_direct_01rm.png", width = 8, height = 8,
+#           units = "in", dpi = 600)
 
 
 FB_map <- plot_map(data = vb12_inad_lga ,
@@ -305,7 +306,7 @@ FB_map <- plot_map(data = vb12_inad_lga ,
                      level = "lga")
 
 FB_map
-tmap_save(FB_map, "outputs/maps/vb12_inad_FB_BYM2_weighted.png", width = 8, height = 8,
+tmap_save(FB_map, "outputs/maps/vb12_inad_FB_BYM2_weighted_synthetic.png", width = 8, height = 8,
           units = "in", dpi = 600)
 
 plot_map <- function(data, col, title, metric, level) {
@@ -344,7 +345,7 @@ vb12_var_direct
 
 # Variance of smoothed estimates: 
 vb12_var_smoothed_FB <- plot_map(data = vb12_inad_lga, 
-                              col = "v12_inad_post_var", 
+                              col = "vb12_inad_post_var", 
                               title = "Variance of smoothed estimates", 
                               metric = "Variance", 
                               level = "lga")
