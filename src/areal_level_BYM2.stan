@@ -11,7 +11,7 @@ functions {
     real icar_normal_lpdf(vector theta, int N, array[] int node1, array[] int node2) {
         return -0.5 * dot_self(theta[node1] - theta[node2]) + 
         normal_lpdf(sum(theta) | 0, 0.001 * N); 
-        //the second term added for sum-to-zero contraits
+        //the second term added for soft sum-to-zero contraits
     }
 }
 data{
@@ -33,7 +33,7 @@ transformed data {
     vector[NS] d_vhat = (to_vector(d).* to_vector(v_hat));
 }
 parameters{
-    // For mean model
+    // For mean model (BYM2)
     vector[N] u1;// structured effect
     vector[N] u2;// random effect
     real<lower=0> sigma_u;
@@ -49,17 +49,18 @@ transformed parameters {
     vector[N] u = (sigma_u)*(sqrt(rho/scaling_factor) * (u1) + sqrt(1-rho) * (u2));
     vector[N] p = inv_logit(u);
     vector[NS] v = exp(gamma0 + gamma1*log(p[adm2_index].*(1-p[adm2_index])) + gamma2*log(to_vector(k)) + square(sigma_tau)*tau);
-    vector[NS] scaled_vhat = d_vhat./v;
+    vector[NS] scaled_vhat= d_vhat./v;
 }
 model{
+    // likelihood
     target += normal_lpdf(p_hat|p[adm2_index],sqrt(v));
-    // mean model
-    target += icar_normal_lpdf(u2|N, node1,node2);
-    target += normal_lpdf(u1|0,1);  
-    target += normal_lpdf(sigma_u|0,1); //change this to penalised prior
-    target += beta_lpdf(rho| 0.5,0.5);
-    // var model
     target += chi_square_lpdf(scaled_vhat|d);
+    // mean model prior
+    target += icar_normal_lpdf(u1|N, node1,node2); 
+    target += normal_lpdf(u2|0,1);   
+    target += normal_lpdf(sigma_u|0,1); //change this to penalised complexity prior 
+    target += beta_lpdf(rho| 0.5,0.5); 
+    // var model prior
     target += normal_lpdf(tau|0,1); //instead of target += normal_lpdf(log(v)|f, sigma_tau); 
     target += normal_lpdf(sigma_tau|0,1); //change this to penalised prior
     target += normal_lpdf(gamma0|0,1);
