@@ -60,4 +60,7 @@ rsconnect/
 # DS store
 *.DS_Store
 
+# Stan executable file
+src/areal_level_BYM2
+
 
