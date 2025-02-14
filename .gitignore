@@ -55,6 +55,7 @@ rsconnect/
 *.shp
 *.shx
 *.xlsx
+*.rds
 
 # DS store
 *.DS_Store
