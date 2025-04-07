@@ -20,7 +20,8 @@ data{
     //array[NS] int<lower=1,upper=N> adm2_index; //index
     array[NS] int<lower=1, upper=N> adm2_index;
     array[NS] real<lower=0, upper =1> p_hat; // direct estimate of prevalence, could be omitted
-    array[NS] real<lower=0> nstar; //effective sample size
+    array[NS] int<lower=0> n_star; //effective sample size
+    array[NS] int<lower=0> y_star;
 
     int<lower=1> N_edges ; 
     array[N_edges] int<lower=1, upper=N> node1 ;
@@ -29,7 +30,7 @@ data{
 }
 transformed data {
     real delta = 1e-9;
-    vector[NS] ystar = to_vector(p_hat) .* to_vector(nstar);
+    //vector[NS] ystar = floor(to_vector(p_hat) .* to_vector(nstar));
 }
 parameters{
     // For mean model (BYM2)
@@ -45,8 +46,8 @@ transformed parameters {
 }
 model{
     // likelihood
-    target += lgamma(to_vector(nstar)) - lgamma(ystar) - lgamma(to_vector(nstar)-ystar) + log(to_vector(nstar)) - log(ystar) - log(to_vector(nstar)-ystar) + (ystar).*log(p[adm2_index])+(to_vector(nstar)-ystar).*log(1-p[adm2_index]);
-     // to mimic binomial_lpmf(ystar|nstar,p[adm2_index]) ;
+    //target += lgamma(to_vector(nstar)) - lgamma(ystar) - lgamma(to_vector(nstar)-ystar) + log(to_vector(nstar)) - log(ystar) - log(to_vector(nstar)-ystar) + (ystar).*log(p[adm2_index])+(to_vector(nstar)-ystar).*log(1-p[adm2_index]);
+    target += binomial_lpmf(y_star|n_star,p[adm2_index]) ;
     // mean model prior
     target += normal_lpdf(u1|0,1);   
     target += icar_normal_lpdf(u2|N, node1,node2); 
