@@ -30,3 +30,69 @@ prepare_bym2 <- function(adj_mat) {
   scl = exp(mean(log(diag(Q_inv))))
   return(list(n1 = nodes$n1, n2 = nodes$n2, scaling_factor = scl))
 }
+
+wilson_lower <- function(phat, n, alpha = 0.05, z = NULL){
+  # compute lower bound of wilson score interval 
+  # phat : weighted sample mean (proportion)
+  # n: (effective) sample size
+  # alpha : confidence level 
+  if (is.null(z))   z <-  qnorm(1-alpha/2)
+  
+  if (is.na(phat)){
+    return(NA)
+  } else if (phat==0) {
+    return(0)
+  } else if (phat==1){
+    return(n/(n+z^2))
+  } else {
+    return(
+      (1/(1+(1/n)*(z^2)))*(phat + (z^2)/(2*n) - ((z)/(2*n))*sqrt(4*n*phat*(1-phat) +z^2))
+    ) 
+  }
+}
+wilson_lower <- Vectorize(wilson_lower)
+wilson_upper <- function(phat, n,  alpha = 0.05, z = NULL){
+  # compute upper bound of wilson score interval 
+  # phat : (weighted) sample mean (proportion)
+  # n: (effective) sample size 
+  # alpha : confidence level 
+  if (is.null(z))   z <-  qnorm(1-alpha/2)
+  if (is.na(phat)){
+    return(NA)
+  } else {
+    if (phat==0) {
+      return(z^2 / (n+z^2))
+    } else if (phat==1) {
+      return(1)
+    } else{
+      return(
+        (1/(1+(1/n)*(z^2)))*(phat + (z^2)/(2*n) + ((z)/(2*n))*sqrt(4*n*phat*(1-phat) + z^2))
+      ) 
+    }
+  }
+}
+wilson_upper <- Vectorize(wilson_upper)
+
+compute_wald <- function(est,se, z){
+  return(est + z*se)
+}
+compute_wilson <- function(est,n,z){
+  if (z<0) wilson_lower(phat=est,n=n,z=-z) else wilson_upper(phat=est, n=n, z=z)
+}
+
+check_overlap<- function(xmin, xmax, ymin, ymax) {
+  # Ensure inputs are vectors of the same length
+  if (length(xmin) != length(xmax) || length(ymin) != length(ymax)) {
+    stop("Input vectors must have the same length.")
+  }
+  
+  # Check for NA values
+  overlap <- ifelse(
+    is.na(xmin) | is.na(xmax) | is.na(ymin) | is.na(ymax),
+    NA, # Return NA if any input in the pair is NA
+    !(xmax < ymin | ymax < xmin) # Otherwise, compute overlap
+  )
+  
+  return(overlap)
+}
+
