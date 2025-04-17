@@ -63,4 +63,8 @@ rsconnect/
 # Stan executable file
 src/areal_level_BYM2
 
+# Data folders: 
+ENNA_FSOM/
+NGHR7BDT/
+
 
