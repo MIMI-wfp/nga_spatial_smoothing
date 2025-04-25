@@ -38,6 +38,7 @@ parameters{
     vector[N] u2;// random effect
     real<lower=0> sigma_u;
     real<lower=0,upper=1> rho;
+    real b0;
     // For variance model
     vector[NS] tau;
     real<lower=0> sigma_tau ;
@@ -46,8 +47,8 @@ parameters{
     real gamma2;
 }
 transformed parameters {
-    vector[N] u = (sigma_u)*(sqrt(rho/scaling_factor) * (u1) + sqrt(1-rho) * (u2));
-    vector[N] p = inv_logit(u);
+    vector[N] u = (sigma_u)*(sqrt(1-rho) * (u1) + sqrt(rho/scaling_factor) * (u2) );
+    vector[N] p = inv_logit(b0+u);
     vector[NS] v = exp(gamma0 + gamma1*log(p[adm2_index].*(1-p[adm2_index])) + gamma2*log(to_vector(k)) + square(sigma_tau)*tau);
     vector[NS] scaled_vhat= d_vhat./v;
 }
@@ -56,10 +57,10 @@ model{
     target += normal_lpdf(p_hat|p[adm2_index],sqrt(v));
     target += chi_square_lpdf(scaled_vhat|d);
     // mean model prior
-    target += icar_normal_lpdf(u1|N, node1,node2); 
-    target += normal_lpdf(u2|0,1);   
+    target += normal_lpdf(u1|0,1);   
+    target += icar_normal_lpdf(u2|N, node1,node2); 
     target += normal_lpdf(sigma_u|0,1); //change this to penalised complexity prior 
-    target += beta_lpdf(rho| 0.5,0.5); 
+    target += beta_lpdf(rho| 0.5, 0.5); 
     // var model prior
     target += normal_lpdf(tau|0,1); //instead of target += normal_lpdf(log(v)|f, sigma_tau); 
     target += normal_lpdf(sigma_tau|0,1); //change this to penalised prior
