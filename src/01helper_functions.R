@@ -147,13 +147,13 @@ apparent_intake <- function(name_of_survey, path_to_file = here::here("processed
       left_join(fc_table, by = "item_code") %>% 
       mutate(
         across(
-          -c(item_code, hhid,item_name ,food_group, quantity_100g, quantity_g),
+          -c(item_code, hhid,item_name , quantity_100g, quantity_g),
           ~.x*quantity_100g
         )
       ) %>% 
       group_by(hhid) %>% 
       summarise(
-        across(-c(item_code,item_name,quantity_100g,quantity_g, food_group),
+        across(-c(item_code,item_name,quantity_100g,quantity_g),
                ~sum(.,na.rm = T))
       ) %>% 
       left_join(hh_info %>% select(hhid, afe), by = "hhid") %>% 
@@ -172,4 +172,3 @@ apparent_intake <- function(name_of_survey, path_to_file = here::here("processed
 ################################################################################
 ############################### END OF SCRIPT ##################################
 ################################################################################
-
